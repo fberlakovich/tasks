@@ -365,6 +365,10 @@ File %1$s contained %2$s.\n\n
   <string name="default_list">Default list</string>
   <string name="default_tags">Default tags</string>
   <string name="default_recurrence">Default recurrence</string>
+  <string name="task_defaults">Task defaults</string>
+  <string name="use_global_default">Use global default: %s</string>
+  <string name="use_global_default_short">Use global default</string>
+  <string name="reset_task_defaults">Reset task defaults</string>
   <string name="filter">Filter</string>
   <string name="opacity">Opacity</string>
   <string name="opacity_header">Header opacity</string>

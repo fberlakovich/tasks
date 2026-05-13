@@ -17,7 +17,6 @@ import org.tasks.R
 import org.tasks.Strings.isNullOrEmpty
 import org.tasks.compose.edit.LocationRow
 import org.tasks.data.Location
-import org.tasks.data.createGeofence
 import org.tasks.data.displayName
 import org.tasks.data.entity.Geofence
 import org.tasks.data.entity.Place
@@ -29,12 +28,10 @@ import org.tasks.location.LocationPermissionDialog.Companion.newLocationPermissi
 import org.tasks.location.LocationPickerActivity
 import org.tasks.preferences.PermissionChecker
 import org.tasks.preferences.PermissionChecker.backgroundPermissions
-import org.tasks.preferences.Preferences
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class LocationControlSet : TaskEditControlFragment() {
-    @Inject lateinit var preferences: Preferences
     @Inject lateinit var dialogBuilder: DialogBuilder
     @Inject lateinit var permissionChecker: PermissionChecker
 
@@ -124,7 +121,7 @@ class LocationControlSet : TaskEditControlFragment() {
                 val location = viewModel.viewState.value.location
                 lifecycleScope.launch {
                     val geofence = if (location == null) {
-                        createGeofence(place.uid, preferences)
+                        viewModel.createDefaultGeofence(place.uid)
                     } else {
                         val existing = location.geofence
                         Geofence(

@@ -22,11 +22,16 @@ suspend fun LocationDao.getLocation(task: Task, preferences: AppPreferences): Lo
 suspend fun createGeofence(
     place: String?,
     preferences: AppPreferences,
-): Geofence {
-    val defaultReminders = preferences.defaultLocationReminder()
-    return Geofence(
-        place = place,
-        isArrival = defaultReminders == 1 || defaultReminders == 3,
-        isDeparture = defaultReminders == 2 || defaultReminders == 3,
-    )
-}
+): Geofence = createGeofence(
+    place = place,
+    defaultReminders = preferences.defaultLocationReminder(),
+)
+
+fun createGeofence(
+    place: String?,
+    defaultReminders: Int,
+): Geofence = Geofence(
+    place = place,
+    isArrival = defaultReminders == 1 || defaultReminders == 3,
+    isDeparture = defaultReminders == 2 || defaultReminders == 3,
+)

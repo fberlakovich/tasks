@@ -44,6 +44,8 @@ import org.tasks.analytics.Firebase
 import org.tasks.calendars.CalendarEventProvider
 import org.tasks.data.Location
 import org.tasks.data.createDueDate
+import org.tasks.data.createGeofence
+import org.tasks.data.createHideUntil
 import org.tasks.data.dao.AlarmDao
 import org.tasks.data.dao.CaldavDao
 import org.tasks.data.dao.GoogleTaskDao
@@ -61,8 +63,14 @@ import org.tasks.data.entity.CaldavCalendar
 import org.tasks.data.entity.CaldavTask
 import org.tasks.data.entity.FORCE_CALDAV_SYNC
 import org.tasks.data.entity.FORCE_MICROSOFT_SYNC
+import org.tasks.data.entity.Geofence
+import org.tasks.data.entity.Place
+import org.tasks.data.entity.Tag
 import org.tasks.data.entity.TagData
 import org.tasks.data.entity.Task
+import org.tasks.data.entity.Task.Companion.DUE_DATE
+import org.tasks.data.entity.Task.Companion.HIDE_UNTIL
+import org.tasks.data.entity.Task.Companion.IMPORTANCE
 import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_FIVE
 import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_NONSTOP
 import org.tasks.data.entity.Task.Companion.hasDueTime
@@ -78,11 +86,14 @@ import org.tasks.location.LocationService
 import org.tasks.preferences.DefaultFilterProvider
 import org.tasks.preferences.PermissionChecker
 import org.tasks.preferences.Preferences
+import org.tasks.preferences.ResolvedTaskDefaults
+import org.tasks.preferences.TaskDefaultsProvider
 import net.fortuna.ical4j.model.Recur
 import net.fortuna.ical4j.model.WeekDay
 import org.tasks.repeats.RecurrenceUtils.newRecur
 import org.tasks.time.DateTime
 import org.tasks.time.DateTimeUtils2.currentTimeMillis
+import org.tasks.time.ONE_HOUR
 import org.tasks.time.startOfDay
 import timber.log.Timber
 import javax.inject.Inject
@@ -114,6 +125,7 @@ class TaskEditViewModel @Inject constructor(
     private val alarmDao: AlarmDao,
     private val taskAttachmentDao: TaskAttachmentDao,
     private val defaultFilterProvider: DefaultFilterProvider,
+    private val taskDefaultsProvider: TaskDefaultsProvider,
 ) : ViewModel() {
 
     private val resources = context.resources
@@ -137,6 +149,17 @@ class TaskEditViewModel @Inject constructor(
             argTask
         }
     }.apply { notes = notes?.stripCarriageReturns() } // copying here broke tests 🙄
+
+    private var priorityEdited = false
+    private var dueDateEdited = false
+    private var startDateEdited = false
+    private var alarmsEdited = false
+    private var ringModeEdited = false
+    private var recurrenceEdited = false
+    private var tagsEdited = false
+    private var locationEdited = false
+    private var calendarEdited = false
+    private var applyingDefaults = false
 
     private val _originalState = MutableStateFlow(
         TaskEditViewState(
@@ -171,28 +194,15 @@ class TaskEditViewModel @Inject constructor(
                         .toPersistentList()
                 },
             alarms = if (task.isNew) {
-                val defaults = task.getTransitory<List<Alarm>>(Task.TRANS_DEFAULT_ALARMS)
-                    ?: emptyList()
-                val defaultRemindersEnabled = runBlocking { preferences.isDefaultDueTimeEnabled() }
-                buildList {
-                    for (alarm in defaults) {
-                        when (alarm.type) {
-                            TYPE_REL_START ->
-                                if (task.hasStartDate() && (task.hasStartTime() || defaultRemindersEnabled))
-                                    add(alarm)
-                            TYPE_REL_END ->
-                                if (task.hasDueDate() && (task.hasDueTime() || defaultRemindersEnabled))
-                                    add(alarm)
-                            else -> add(alarm)
-                        }
-                    }
-                    if (task.randomReminder > 0) {
-                        add(Alarm(time = task.randomReminder, type = Alarm.TYPE_RANDOM))
-                    }
-                }
+                buildDefaultAlarms(
+                    defaults = task.getTransitory(Task.TRANS_DEFAULT_ALARMS) ?: emptyList(),
+                    dueDate = task.dueDate,
+                    startDate = task.hideUntil,
+                    randomReminder = task.randomReminder,
+                )
             } else {
-                emptyList()
-            }.toPersistentSet(),
+                persistentSetOf()
+            },
             multilineTitle = preferences.multilineTitle,
             location = null,
             tags = persistentSetOf(),
@@ -222,6 +232,7 @@ class TaskEditViewModel @Inject constructor(
     val dueDate = MutableStateFlow(task.dueDate)
 
     fun setDueDate(value: Long) {
+        dueDateEdited = true
         val hadDueDate = dueDate.value > 0
         val hadDueTime = hasDueTime(dueDate.value)
         dueDate.value = when {
@@ -239,7 +250,7 @@ class TaskEditViewModel @Inject constructor(
             else -> false
         }
         if (shouldAddReminders) {
-            runBlocking { preferences.defaultAlarms() }
+            runBlocking { taskDefaultsProvider.get(_viewState.value.list).alarms }
                 .filter { it.type == TYPE_REL_END }
                 .forEach { alarm ->
                     _viewState.update { state ->
@@ -252,6 +263,7 @@ class TaskEditViewModel @Inject constructor(
     val startDate = MutableStateFlow(task.hideUntil)
 
     fun setStartDate(value: Long) {
+        startDateEdited = true
         val hadStartDate = startDate.value > 0
         val hadStartTime = hasDueTime(startDate.value)
         startDate.value = when {
@@ -270,7 +282,7 @@ class TaskEditViewModel @Inject constructor(
             else -> false
         }
         if (shouldAddReminders) {
-            runBlocking { preferences.defaultAlarms() }
+            runBlocking { taskDefaultsProvider.get(_viewState.value.list).alarms }
                 .filter { it.type == TYPE_REL_START }
                 .forEach { alarm ->
                     _viewState.update { state ->
@@ -282,19 +294,29 @@ class TaskEditViewModel @Inject constructor(
 
     var ringNonstop: Boolean = task.isNotifyModeNonstop
         set(value) {
+            if (!applyingDefaults) {
+                ringModeEdited = true
+            }
             field = value
             if (value) {
                 ringFiveTimes = false
             }
+            ringMode.value = getRingFlags()
         }
 
     var ringFiveTimes:Boolean = task.isNotifyModeFive
         set(value) {
+            if (!applyingDefaults) {
+                ringModeEdited = true
+            }
             field = value
             if (value) {
                 ringNonstop = false
             }
+            ringMode.value = getRingFlags()
         }
+
+    val ringMode = MutableStateFlow(getRingFlags())
 
     fun hasChanges(): Boolean {
         val viewState = _viewState.value
@@ -540,12 +562,14 @@ class TaskEditViewModel @Inject constructor(
     }
 
     fun removeAlarm(alarm: Alarm) {
+        alarmsEdited = true
         _viewState.update { state ->
             state.copy(alarms = state.alarms.minus(alarm).toPersistentSet())
         }
     }
 
     fun addAlarm(alarm: Alarm) {
+        alarmsEdited = true
         _viewState.update { state ->
             state.copy(alarms = state.alarms.plusAlarm(alarm))
         }
@@ -579,6 +603,7 @@ class TaskEditViewModel @Inject constructor(
     }
 
     fun setPriority(priority: Int) {
+        priorityEdited = true
         _viewState.update { state -> state.copy(task = state.task.copy(priority = priority)) }
     }
 
@@ -587,17 +612,13 @@ class TaskEditViewModel @Inject constructor(
     }
 
     fun setRecurrence(recurrence: String?) {
+        recurrenceEdited = true
+        if (recurrence?.isNotBlank() == true && dueDate.value == 0L) {
+            dueDateEdited = true
+            dueDate.value = createDueDate(Task.URGENCY_SPECIFIC_DAY, currentTimeMillis().startOfDay())
+        }
         _viewState.update { state ->
-            state.copy(
-                task = state.task.copy(
-                    recurrence = recurrence,
-                    dueDate = if (recurrence?.isNotBlank() == true && task.dueDate == 0L) {
-                        currentTimeMillis().startOfDay()
-                    } else {
-                        task.dueDate
-                    }
-                )
-            )
+            state.copy(task = state.task.copy(recurrence = recurrence))
         }
     }
 
@@ -606,18 +627,111 @@ class TaskEditViewModel @Inject constructor(
     }
 
     fun setList(list: CaldavFilter) {
-        _viewState.update { it.copy(list = list) }
+        if (!task.isNew) {
+            _viewState.update { it.copy(list = list) }
+            return
+        }
+        val defaults = runBlocking { taskDefaultsProvider.get(list) }
+        val updatedDueDate = if (dueDateEdited) dueDate.value else createDueDate(defaults.dueDate, 0)
+        val updatedStartDate = if (startDateEdited) {
+            startDate.value
+        } else {
+            task.copy().apply { dueDate = updatedDueDate }.createHideUntil(defaults.hideUntil, 0)
+        }
+        dueDate.value = updatedDueDate
+        startDate.value = updatedStartDate
+        if (!ringModeEdited) {
+            applyDefaultRingMode(defaults.ringMode)
+        }
+        val defaultTags = if (tagsEdited) null else runBlocking { defaultTags(defaults.tagUids) }
+        val defaultLocation = if (locationEdited) null else runBlocking { defaultLocation(defaults) }
+        _viewState.update { state ->
+            val updatedTask = state.task
+                .let { if (priorityEdited) it else it.copy(priority = defaults.priority) }
+                .let {
+                    if (recurrenceEdited) {
+                        it
+                    } else {
+                        it.copy(
+                            recurrence = defaults.recurrence,
+                            repeatFrom = defaults.repeatFrom,
+                        )
+                    }
+                }
+            state.copy(
+                list = list,
+                task = updatedTask,
+                calendar = if (calendarEdited) state.calendar else defaults.calendarId,
+                location = if (locationEdited) state.location else defaultLocation,
+                tags = defaultTags?.toPersistentSet() ?: state.tags,
+                alarms = if (alarmsEdited) {
+                    state.alarms
+                } else {
+                    buildDefaultAlarms(
+                        defaults = defaults.alarms,
+                        dueDate = updatedDueDate,
+                        startDate = updatedStartDate,
+                        randomReminder = ONE_HOUR * defaults.randomReminderHours,
+                    )
+                },
+            )
+        }
+    }
+
+    private fun buildDefaultAlarms(
+        defaults: List<Alarm>,
+        dueDate: Long,
+        startDate: Long,
+        randomReminder: Long,
+    ): ImmutableSet<Alarm> {
+        val defaultRemindersEnabled = runBlocking { preferences.isDefaultDueTimeEnabled() }
+        return buildList {
+            for (alarm in defaults) {
+                when (alarm.type) {
+                    TYPE_REL_START ->
+                        if (startDate > 0 && (hasDueTime(startDate) || defaultRemindersEnabled)) {
+                            add(alarm.copy(task = task.id))
+                        }
+                    TYPE_REL_END ->
+                        if (dueDate > 0 && (hasDueTime(dueDate) || defaultRemindersEnabled)) {
+                            add(alarm.copy(task = task.id))
+                        }
+                    else -> add(alarm.copy(task = task.id))
+                }
+            }
+            if (randomReminder > 0) {
+                add(Alarm(task = task.id, time = randomReminder, type = Alarm.TYPE_RANDOM))
+            }
+        }.toPersistentSet()
+    }
+
+    private fun applyDefaultRingMode(ringMode: Int) {
+        applyingDefaults = true
+        try {
+            ringNonstop = ringMode == NOTIFY_MODE_NONSTOP
+            ringFiveTimes = ringMode == NOTIFY_MODE_FIVE
+        } finally {
+            applyingDefaults = false
+        }
     }
 
     fun setTags(tags: Set<TagData>) {
+        tagsEdited = true
         _viewState.update { it.copy(tags = tags.toPersistentSet()) }
     }
 
+    suspend fun createDefaultGeofence(placeUid: String?): Geofence = createGeofence(
+        place = placeUid,
+        defaultReminders = taskDefaultsProvider.get(_viewState.value.list).locationReminder,
+    )
+
     fun setLocation(location: Location?) {
+        locationEdited = true
         _viewState.update { it.copy(location = location) }
     }
 
     fun setCalendar(calendar: String?) {
+        calendarEdited = true
         _viewState.update { it.copy(calendar = calendar) }
     }
 
@@ -644,9 +758,47 @@ class TaskEditViewModel @Inject constructor(
     }
 
     fun setRepeatFrom(repeatFrom: @Task.RepeatFrom Int) {
+        recurrenceEdited = true
         _viewState.update { state ->
             state.copy(task = state.task.copy(repeatFrom = repeatFrom))
         }
+    }
+
+    private suspend fun defaultTags(tagUids: List<String>): Set<TagData> =
+        if (tagUids.isEmpty()) emptySet() else tagDataDao.getByUuid(tagUids).toSet()
+
+    private suspend fun defaultLocation(defaults: ResolvedTaskDefaults): Location? =
+        defaults.locationUid
+            ?.let { locationDao.getPlace(it) }
+            ?.let { Location(createGeofence(it.uid, defaults.locationReminder), it) }
+
+    private suspend fun markInitialValuesChangedFromDefaults(
+        defaults: ResolvedTaskDefaults?,
+        tags: ImmutableSet<TagData>,
+        location: Location?,
+    ) {
+        if (!task.isNew || defaults == null || !task.hasTransitory(Task.TRANS_DEFAULT_ALARMS)) {
+            return
+        }
+        val initialValues = task
+            .getTransitory<ArrayList<String>>(Task.TRANS_INITIAL_VALUES)
+            ?.toSet()
+            ?: emptySet()
+        priorityEdited = IMPORTANCE.name in initialValues || task.priority != defaults.priority
+        dueDateEdited = DUE_DATE.name in initialValues || task.dueDate != createDueDate(defaults.dueDate, 0)
+        startDateEdited = HIDE_UNTIL.name in initialValues || task.hideUntil != task.copy()
+            .apply { dueDate = task.dueDate }
+            .createHideUntil(defaults.hideUntil, 0)
+        recurrenceEdited = task.recurrence != defaults.recurrence || task.repeatFrom != defaults.repeatFrom
+        tagsEdited = Tag.KEY in initialValues || tags != defaultTags(defaults.tagUids).toPersistentSet()
+        locationEdited = Place.KEY in initialValues || !location.sameLocationDefault(defaultLocation(defaults))
+    }
+
+    private fun Location?.sameLocationDefault(other: Location?): Boolean = when {
+        this == null || other == null -> this == other
+        else -> place.uid == other.place.uid &&
+                geofence.isArrival == other.geofence.isArrival &&
+                geofence.isDeparture == other.geofence.isDeparture
     }
 
     fun onDueDateChanged() {
@@ -687,15 +839,44 @@ class TaskEditViewModel @Inject constructor(
                 }.toPersistentSet()
             }
             val list = async { defaultFilterProvider.getList(task) }
-            val location = async { locationDao.getLocation(task, preferences) }
+            val defaults = async { if (task.isNew) taskDefaultsProvider.get(list.await()) else null }
+            val location = async {
+                val taskDefaults = defaults.await()
+                if (task.isNew && task.hasTransitory(Place.KEY)) {
+                    val placeUid = task.getTransitory<String>(Place.KEY)!!
+                    locationDao.getPlace(placeUid)
+                        ?.let {
+                            Location(
+                                createGeofence(
+                                    it.uid,
+                                    taskDefaults?.locationReminder
+                                        ?: preferences.defaultLocationReminder(),
+                                ),
+                                it,
+                            )
+                        }
+                } else {
+                    locationDao.getLocation(task, preferences)
+                }
+            }
             val tags = async { tagDataDao.getTags(task).toPersistentSet() }
+            val taskDefaults = defaults.await()
+            val initialList = list.await()
+            val initialLocation = location.await()
+            val initialTags = tags.await()
+            markInitialValuesChangedFromDefaults(taskDefaults, initialTags, initialLocation)
             _originalState.update {
                 it.copy(
                     attachments = attachments.await(),
                     alarms = alarms.await(),
-                    list = list.await(),
-                    location = location.await(),
-                    tags = tags.await(),
+                    list = initialList,
+                    calendar = if (task.isNew && permissionChecker.canAccessCalendars()) {
+                        taskDefaults?.calendarId
+                    } else {
+                        originalState.value.calendar
+                    },
+                    location = initialLocation,
+                    tags = initialTags,
                 )
             }
             _viewState.update {
@@ -703,6 +884,7 @@ class TaskEditViewModel @Inject constructor(
                     attachments = originalState.value.attachments,
                     alarms = originalState.value.alarms,
                     list = originalState.value.list,
+                    calendar = originalState.value.calendar,
                     location = originalState.value.location,
                     tags = originalState.value.tags,
                 )

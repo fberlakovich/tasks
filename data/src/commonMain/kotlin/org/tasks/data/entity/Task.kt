@@ -336,6 +336,7 @@ data class Task @OptIn(ExperimentalSerializationApi::class) constructor(
 
         private const val TRANS_SUPPRESS_REFRESH = "suppress-refresh"
         const val TRANS_DEFAULT_ALARMS = "default_alarms"
+        const val TRANS_INITIAL_VALUES = "initial_values"
         const val TRANS_RANDOM = "random"
 
         private val INVALID_COUNT = ";?COUNT=(-1|0)".toRegex()

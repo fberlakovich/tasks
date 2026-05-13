@@ -74,7 +74,13 @@ class GoogleTaskListSettingsActivity : BaseListSettingsActivity() {
 
         setContent {
             TasksTheme {
-                BaseSettingsContent()
+                BaseSettingsContent(
+                    extensionContent = {
+                        if (canEditTaskListDefaults) {
+                            TaskListDefaultsContent()
+                        }
+                    },
+                )
                 Toaster(state = snackbar)
             }
         }
@@ -132,6 +138,9 @@ class GoogleTaskListSettingsActivity : BaseListSettingsActivity() {
                                     )
                     )
                 }
+                if (hasTaskListDefaultChanges()) {
+                    saveTaskListDefaults()
+                }
                 finish()
             }
         }
@@ -160,7 +169,7 @@ class GoogleTaskListSettingsActivity : BaseListSettingsActivity() {
     override fun hasChanges(): Boolean =
         if (isNewList) {
             baseViewModel.color != 0 || !isNullOrEmpty(newName)
-        } else colorChanged() || nameChanged() || iconChanged()
+        } else colorChanged() || nameChanged() || iconChanged() || hasTaskListDefaultChanges()
 
     private fun colorChanged() = baseViewModel.color != gtasksList.color
 
@@ -207,6 +216,7 @@ class GoogleTaskListSettingsActivity : BaseListSettingsActivity() {
             color = baseViewModel.color,
             icon = baseViewModel.icon,
         )
+        saveTaskListDefaults()
         caldavDao.insertOrReplace(result)
 
         setResult(

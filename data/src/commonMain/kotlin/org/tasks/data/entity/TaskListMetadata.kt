@@ -23,6 +23,9 @@ class TaskListMetadata {
     @ColumnInfo(name = "task_ids")
     var taskIds: String? = "[]"
 
+    @ColumnInfo(name = "defaults")
+    var defaults: String? = null
+
     companion object {
         const val FILTER_ID_ALL = "all"
         const val FILTER_ID_TODAY = "today"

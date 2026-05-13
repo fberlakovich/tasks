@@ -8,10 +8,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -37,25 +34,15 @@ class ReminderControlSet : TaskEditControlFragment() {
     @Inject lateinit var activity: Activity
     @Inject lateinit var dialogBuilder: DialogBuilder
 
-    private val ringMode = mutableIntStateOf(0)
-
     private fun setRingMode(ringMode: Int) {
         viewModel.ringNonstop = ringMode == 2
         viewModel.ringFiveTimes = ringMode == 1
-        this.ringMode.intValue = ringMode
     }
 
     @OptIn(ExperimentalPermissionsApi::class)
     @Composable
     override fun Content() {
-        LaunchedEffect(Unit) {
-            when {
-                viewModel.ringNonstop -> setRingMode(2)
-                viewModel.ringFiveTimes -> setRingMode(1)
-                else -> setRingMode(0)
-            }
-        }
-        val ringMode by remember { this@ReminderControlSet.ringMode }
+        val ringMode = viewModel.ringMode.collectAsStateWithLifecycle().value
         val hasReminderPermissions by rememberReminderPermissionState()
         val notificationPermissions = if (AndroidUtilities.atLeastTiramisu()) {
             rememberPermissionState(

@@ -29,6 +29,7 @@ import org.tasks.location.LocationService
 import org.tasks.preferences.DefaultFilterProvider
 import org.tasks.preferences.PermissivePermissionChecker
 import org.tasks.preferences.Preferences
+import org.tasks.preferences.TaskDefaultsProvider
 import org.tasks.ui.TaskEditViewModel
 import javax.inject.Inject
 
@@ -51,6 +52,7 @@ open class BaseTaskEditViewModelTest : InjectingTestCase() {
     @Inject lateinit var alarmDao: AlarmDao
     @Inject lateinit var userActivityDao: UserActivityDao
     @Inject lateinit var caldavDao: CaldavDao
+    @Inject lateinit var taskDefaultsProvider: TaskDefaultsProvider
 
     protected lateinit var viewModel: TaskEditViewModel
 
@@ -91,6 +93,7 @@ open class BaseTaskEditViewModelTest : InjectingTestCase() {
             taskAttachmentDao = db.taskAttachmentDao(),
             alarmDao = db.alarmDao(),
             defaultFilterProvider = defaultFilterProvider,
+            taskDefaultsProvider = taskDefaultsProvider,
         )
     }
 

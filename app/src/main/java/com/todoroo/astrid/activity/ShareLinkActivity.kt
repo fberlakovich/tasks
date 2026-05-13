@@ -37,7 +37,7 @@ class ShareLinkActivity : AppCompatActivity() {
             Intent.ACTION_PROCESS_TEXT -> lifecycleScope.launch {
                 val text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
                 if (text != null) {
-                    val task = taskCreator.createWithValues(text.toString())
+                    val task = taskCreator.createWithDefaultListValues(text.toString())
                     editTask(task)
                     firebase.addTask("clipboard")
                 }
@@ -69,7 +69,7 @@ class ShareLinkActivity : AppCompatActivity() {
             }
 
             Intent.ACTION_VIEW -> lifecycleScope.launch {
-                editTask(taskCreator.createWithValues(""))
+                editTask(taskCreator.createWithDefaultListValues(""))
                 firebase.addTask("action_view")
                 finish()
             }
@@ -116,7 +116,7 @@ class ShareLinkActivity : AppCompatActivity() {
             val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
             val hasSubject = subject?.isNotBlank() == true
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            val task = createWithValues(if (hasSubject) subject else text)
+            val task = createWithDefaultListValues(if (hasSubject) subject else text)
             if (hasSubject) {
                 task.notes = text
             }

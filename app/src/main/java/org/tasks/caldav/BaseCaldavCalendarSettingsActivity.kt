@@ -86,6 +86,10 @@ abstract class BaseCaldavCalendarSettingsActivity : BaseListSettingsActivity() {
                 showProgressIndicator()
                 updateNameAndColor(caldavAccount, caldavCalendar!!, name, baseViewModel.color)
             }
+            hasTaskListDefaultChanges() -> {
+                saveTaskListDefaults()
+                finish()
+            }
             else -> finish()
         }
     }
@@ -155,6 +159,7 @@ abstract class BaseCaldavCalendarSettingsActivity : BaseListSettingsActivity() {
             color = baseViewModel.color,
             icon = baseViewModel.icon,
         )
+        saveTaskListDefaults()
         caldavDao.update(result)
         setResult(
                 RESULT_OK,
@@ -171,7 +176,7 @@ abstract class BaseCaldavCalendarSettingsActivity : BaseListSettingsActivity() {
         if (caldavCalendar == null)
             !isNullOrEmpty(newName) || baseViewModel.color != 0 || baseViewModel.icon?.isBlank() == false
         else
-            nameChanged() || iconChanged() || colorChanged()
+            nameChanged() || iconChanged() || colorChanged() || hasTaskListDefaultChanges()
 
     private fun nameChanged(): Boolean = caldavCalendar!!.name != newName
 
@@ -223,7 +228,12 @@ abstract class BaseCaldavCalendarSettingsActivity : BaseListSettingsActivity() {
         BaseSettingsContent (
             optionButton = optionButton,
             headerContent = headerContent,
-            extensionContent = extensionContent,
+            extensionContent = {
+                if (canEditTaskListDefaults) {
+                    TaskListDefaultsContent()
+                }
+                extensionContent()
+            },
             fab = fab,
         )
         Toaster(state = snackbar)

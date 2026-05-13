@@ -11,6 +11,9 @@ abstract class TaskListMetadataDao {
     @Query("SELECT * from task_list_metadata where tag_uuid = :tagUuid OR filter = :tagUuid LIMIT 1")
     abstract suspend fun fetchByTagOrFilter(tagUuid: String): TaskListMetadata?
 
+    @Query("SELECT * from task_list_metadata where filter = :filter LIMIT 1")
+    abstract suspend fun fetchByFilter(filter: String): TaskListMetadata?
+
     @Query("SELECT * FROM task_list_metadata")
     abstract suspend fun getAll(): List<TaskListMetadata>
 
@@ -23,4 +26,12 @@ abstract class TaskListMetadataDao {
     suspend fun createNew(taskListMetadata: TaskListMetadata) {
         taskListMetadata.id = insert(taskListMetadata)
     }
+
+    suspend fun getOrCreateForFilter(filter: String): TaskListMetadata =
+        fetchByFilter(filter)
+            ?: TaskListMetadata().apply {
+                this.filter = filter
+                tagUuid = null
+                createNew(this)
+            }
 }

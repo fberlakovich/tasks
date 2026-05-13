@@ -40,6 +40,9 @@ class OpenTasksListSettingsActivity : BaseCaldavCalendarSettingsActivity() {
                     SelectIconRow(icon = viewState.icon ?: defaultIcon) { showIconPicker() }
                     AddShortcutToHomeRow(onClick = { createShortcut(color) })
                     AddWidgetToHomeRow(onClick = { createWidget() })
+                    if (canEditTaskListDefaults) {
+                        TaskListDefaultsContent()
+                    }
                 }
                 Toaster(state = snackbar)
             }

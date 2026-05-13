@@ -13,17 +13,12 @@ import org.tasks.data.createDueDate
 import org.tasks.data.createGeofence
 import org.tasks.data.createHideUntil
 import org.tasks.data.getDefaultAlarms
-import org.tasks.data.setDefaultReminders
 import org.tasks.data.dao.AlarmDao
 import org.tasks.data.dao.CaldavDao
 import org.tasks.data.dao.GoogleTaskDao
 import org.tasks.data.dao.LocationDao
 import org.tasks.data.dao.TagDao
 import org.tasks.data.dao.TagDataDao
-import org.tasks.data.entity.Alarm
-import org.tasks.data.entity.Alarm.Companion.TYPE_RANDOM
-import org.tasks.data.entity.Alarm.Companion.TYPE_REL_END
-import org.tasks.data.entity.Alarm.Companion.TYPE_REL_START
 import org.tasks.data.entity.CaldavTask
 import org.tasks.data.entity.Place
 import org.tasks.data.entity.Tag
@@ -31,14 +26,15 @@ import org.tasks.data.entity.TagData
 import org.tasks.data.entity.Task
 import org.tasks.data.entity.Task.Companion.DUE_DATE
 import org.tasks.data.entity.Task.Companion.HIDE_UNTIL
-import org.tasks.data.entity.Task.Companion.HIDE_UNTIL_NONE
 import org.tasks.data.entity.Task.Companion.IMPORTANCE
 import org.tasks.filters.CaldavFilter
 import org.tasks.filters.Filter
 import org.tasks.filters.mapFromSerializedString
-import org.tasks.preferences.AppPreferences
+import org.tasks.location.LocationService
 import org.tasks.preferences.DefaultFilterProvider
 import org.tasks.preferences.Preferences
+import org.tasks.preferences.ResolvedTaskDefaults
+import org.tasks.preferences.TaskDefaultsProvider
 import org.tasks.time.DateTimeUtils2.currentTimeMillis
 import org.tasks.time.ONE_HOUR
 import org.tasks.time.startOfDay
@@ -56,16 +52,26 @@ class TaskCreator @Inject constructor(
     private val defaultFilterProvider: DefaultFilterProvider,
     private val caldavDao: CaldavDao,
     private val locationDao: LocationDao,
+    private val locationService: LocationService,
     private val alarmDao: AlarmDao,
+    private val taskDefaultsProvider: TaskDefaultsProvider,
 ) {
     suspend fun basicQuickAddTask(title: String, filter: Filter? = null): Task {
-        val task = createWithValues(filter, title.trim { it <= ' ' })
+        val values = mapFromSerializedString(filter?.valuesForNewTasks)
+        val defaultsFilter = resolveDefaultsFilter(filter ?: defaultFilterProvider.getDefaultList(), values)
+        val defaults = taskDefaultsProvider.get(defaultsFilter)
+        val task = create(
+            values,
+            title.trim { it <= ' ' },
+            defaults,
+        )
         taskDao.createNew(task)
-        val gcalCreateEventEnabled = preferences.isDefaultCalendarSet && task.hasDueDate() // $NON-NLS-1$
+        val calendarId = defaults.calendarId
+        val gcalCreateEventEnabled = calendarId != null && task.hasDueDate() // $NON-NLS-1$
         if (!isNullOrEmpty(task.title)
                 && gcalCreateEventEnabled
                 && isNullOrEmpty(task.calendarURI)) {
-            val calendarUri = gcalHelper.createTaskEvent(task, preferences.defaultCalendar)
+            val calendarUri = gcalHelper.createTaskEvent(task, calendarId)
             task.calendarURI = calendarUri.toString()
         }
         createTags(task)
@@ -91,33 +97,32 @@ class TaskCreator @Inject constructor(
             )
         } else {
             val remoteList = defaultFilterProvider.getDefaultList()
-            if (remoteList is CaldavFilter) {
-                if (remoteList.isGoogleTasks) {
-                    googleTaskDao.insertAndShift(
-                        task,
-                        CaldavTask(
-                            task = task.id,
-                            calendar = remoteList.uuid,
-                            remoteId = null
-                        ),
-                        addToTop
-                    )
-                } else {
-                    caldavDao.insert(
-                        task,
-                        CaldavTask(
-                            task = task.id,
-                            calendar = remoteList.uuid,
-                        ),
-                        addToTop
-                    )
-                }
+            if (remoteList.isGoogleTasks) {
+                googleTaskDao.insertAndShift(
+                    task,
+                    CaldavTask(
+                        task = task.id,
+                        calendar = remoteList.uuid,
+                        remoteId = null
+                    ),
+                    addToTop
+                )
+            } else {
+                caldavDao.insert(
+                    task,
+                    CaldavTask(
+                        task = task.id,
+                        calendar = remoteList.uuid,
+                    ),
+                    addToTop
+                )
             }
         }
         if (task.hasTransitory(Place.KEY)) {
             val place = locationDao.getPlace(task.getTransitory<String>(Place.KEY)!!)
             if (place != null) {
-                locationDao.insert(createGeofence(place.uid, preferences))
+                locationDao.insert(createGeofence(place.uid, defaults.locationReminder).copy(task = task.id))
+                locationService.updateGeofences(place)
             }
         }
         taskSaver.save(task, null)
@@ -126,67 +131,90 @@ class TaskCreator @Inject constructor(
     }
 
     suspend fun createWithValues(title: String?): Task {
-        return create(null, title)
+        return create(null, title, null)
     }
 
-    suspend fun createWithValues(filter: Filter?, title: String?): Task =
-        create(mapFromSerializedString(filter?.valuesForNewTasks), title)
+    suspend fun createWithDefaultListValues(title: String?): Task =
+        createWithValues(defaultFilterProvider.getDefaultList(), title)
+
+    suspend fun createWithValues(filter: Filter?, title: String?): Task {
+        val values = mapFromSerializedString(filter?.valuesForNewTasks)
+        return create(values, title, resolveDefaultsFilter(filter, values))
+    }
 
     /**
      * Create task from the given content values, saving it. This version doesn't need to start with a
      * base task model.
      */
-    internal suspend fun create(values: Map<String, Any>?, title: String?): Task {
+    internal suspend fun create(values: Map<String, Any>?, title: String?): Task = create(values, title, null)
+
+    private suspend fun create(
+        values: Map<String, Any>?,
+        title: String?,
+        filter: Filter?,
+    ): Task = create(values, title, taskDefaultsProvider.get(filter))
+
+    private suspend fun create(
+        values: Map<String, Any>?,
+        title: String?,
+        defaults: ResolvedTaskDefaults,
+    ): Task {
         val task = Task(
             title = title?.trim { it <= ' ' },
             creationDate = currentTimeMillis(),
             modificationDate = currentTimeMillis(),
             remoteId = UUIDHelper.newUUID(),
-            priority = preferences.defaultPriority(),
+            priority = defaults.priority,
         )
-        preferences.getStringValue(R.string.p_default_recurrence)
-                ?.takeIf { it.isNotBlank() }
-                ?.let {
-                    task.recurrence = it
-                    task.repeatFrom = if (preferences.getIntegerFromString(R.string.p_default_recurrence_from, 0) == 1) {
-                        Task.RepeatFrom.COMPLETION_DATE
-                    } else {
-                        Task.RepeatFrom.DUE_DATE
-                    }
-                }
-        preferences.getStringValue(R.string.p_default_location)
-                ?.takeIf { it.isNotBlank() }
-                ?.let { task.putTransitory(Place.KEY, it) }
-        task.setDefaultReminders(preferences)
+        task.repeatFrom = defaults.repeatFrom
+        defaults.recurrence?.let {
+            task.recurrence = it
+        }
+        defaults.locationUid?.let { task.putTransitory(Place.KEY, it) }
+        task.randomReminder = ONE_HOUR * defaults.randomReminderHours
+        task.putTransitory(Task.TRANS_DEFAULT_ALARMS, defaults.alarms)
+        task.ringFlags = defaults.ringMode
         val tags = ArrayList<String>()
+        val initialValues = ArrayList<String>()
         values?.entries?.forEach { (key, value) ->
             when (key) {
-                Tag.KEY -> tags.add(value as String)
-                GoogleTask.KEY, CaldavTask.KEY, Place.KEY -> task.putTransitory(key, value)
-                DUE_DATE.name -> value.substitute()?.toLongOrNull()?.let { task.dueDate =
-                    createDueDate(Task.URGENCY_SPECIFIC_DAY, it) }
-                IMPORTANCE.name -> value.substitute()?.toIntOrNull()?.let { task.priority = it }
-                HIDE_UNTIL.name ->
-                    value.substitute()?.toLongOrNull()?.let { task.hideUntil = it.startOfDay() }
+                Tag.KEY -> {
+                    tags.add(value as String)
+                    initialValues.add(Tag.KEY)
+                }
+                GoogleTask.KEY, CaldavTask.KEY -> task.putTransitory(key, value)
+                Place.KEY -> {
+                    task.putTransitory(key, value)
+                    initialValues.add(Place.KEY)
+                }
+                DUE_DATE.name -> value.substitute()?.toLongOrNull()?.let {
+                    task.dueDate = createDueDate(Task.URGENCY_SPECIFIC_DAY, it)
+                    initialValues.add(key)
+                }
+                IMPORTANCE.name -> value.substitute()?.toIntOrNull()?.let {
+                    task.priority = it
+                    initialValues.add(key)
+                }
+                HIDE_UNTIL.name -> value.substitute()?.toLongOrNull()?.let {
+                    task.hideUntil = it.startOfDay()
+                    initialValues.add(key)
+                }
             }
         }
+        if (initialValues.isNotEmpty()) {
+            task.putTransitory(Task.TRANS_INITIAL_VALUES, initialValues)
+        }
         if (values?.containsKey(DUE_DATE.name) != true) {
-            task.dueDate = createDueDate(
-                    preferences.getIntegerFromString(R.string.p_default_urgency_key, Task.URGENCY_NONE),
-                    0)
+            task.dueDate = createDueDate(defaults.dueDate, 0)
         }
         if (values?.containsKey(HIDE_UNTIL.name) != true) {
-            task.hideUntil = task.createHideUntil(
-                    preferences.getIntegerFromString(R.string.p_default_hideUntil_key, HIDE_UNTIL_NONE),
-                    0
-            )
+            task.hideUntil = task.createHideUntil(defaults.hideUntil, 0)
         }
         if (tags.isEmpty()) {
-            preferences.getStringValue(R.string.p_default_tags)
-                    ?.split(",")
-                    ?.map { tagDataDao.getByUuid(it) }
-                    ?.mapNotNull { it?.name }
-                    ?.let { tags.addAll(it) }
+            defaults.tagUids
+                .map { tagDataDao.getByUuid(it) }
+                .mapNotNull { it?.name }
+                .let { tags.addAll(it) }
         }
         try {
             parse(tagDataDao, task, tags)
@@ -196,6 +224,20 @@ class TaskCreator @Inject constructor(
         task.putTransitory(Tag.KEY, tags)
         return task
     }
+
+    private suspend fun resolveDefaultsFilter(filter: Filter?, values: Map<String, Any>?): Filter? =
+        values?.resolveListFilter()
+            ?: (filter as? CaldavFilter)
+            ?: filter?.let { defaultFilterProvider.getDefaultList() }
+
+    private suspend fun Map<String, Any>.resolveListFilter(): CaldavFilter? =
+        ((this[CaldavTask.KEY] ?: this[GoogleTask.KEY]) as? String)
+            ?.let { caldavDao.getCalendarByUuid(it) }
+            ?.let { calendar ->
+                calendar.account
+                    ?.let { caldavDao.getAccountByUuid(it) }
+                    ?.let { account -> CaldavFilter(calendar = calendar, account = account) }
+            }
 
     suspend fun createTags(task: Task) {
         for (tag in task.tags) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.todoroo.astrid.activity.TaskListFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.tasks.R
@@ -56,8 +57,13 @@ class CaldavCalendarSettingsActivity : BaseCaldavCalendarSettingsActivity() {
             }
         }
         viewModel.finish.observe(this) {
-            setResult(RESULT_OK, it)
-            finish()
+            lifecycleScope.launch {
+                if (it.action == TaskListFragment.ACTION_RELOAD) {
+                    saveTaskListDefaults()
+                }
+                setResult(RESULT_OK, it)
+                finish()
+            }
         }
 
         setContent {

@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -121,6 +122,7 @@ fun DefaultRemindersList(
     onAlarmClick: (Alarm) -> Unit,
     onAlarmRemove: (Alarm) -> Unit,
     onAddClick: () -> Unit,
+    extraContent: @Composable ColumnScope.() -> Unit = {},
 ) {
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
@@ -138,6 +140,7 @@ fun DefaultRemindersList(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.height(16.dp))
+            extraContent()
             alarms.forEach { alarm ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

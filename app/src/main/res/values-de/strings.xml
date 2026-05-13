@@ -257,6 +257,10 @@
     <string name="no_title">(kein Titel)</string>
     <string name="back_button_saves_task">„Zurück“ speichert Aufgabe</string>
     <string name="default_list">Standardliste</string>
+    <string name="task_defaults">Aufgaben-Standardwerte</string>
+    <string name="use_global_default">Globalen Standard verwenden: %s</string>
+    <string name="use_global_default_short">Globalen Standard verwenden</string>
+    <string name="reset_task_defaults">Aufgaben-Standardwerte zurücksetzen</string>
     <string name="opacity">Deckkraft</string>
     <string name="color">Farbe</string>
     <string name="launcher_icon">Launcher-Symbol</string>

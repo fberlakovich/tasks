@@ -65,7 +65,7 @@ class SubtaskControlSet : TaskEditControlFragment() {
             addSubtask = {
                 lifecycleScope.launch {
                     viewModel.setSubtasks(
-                        viewState.newSubtasks.plus(taskCreator.createWithValues(""))
+                        viewState.newSubtasks.plus(taskCreator.createWithValues(viewState.list, ""))
                     )
                 }
             },

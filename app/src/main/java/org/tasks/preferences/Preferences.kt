@@ -229,7 +229,7 @@ class Preferences @JvmOverloads constructor(
         getIntegerFromString(R.string.p_default_reminders_mode_key, 0)
 
     override suspend fun defaultLocationReminder(): Int =
-        getIntegerFromString(R.string.p_default_location_reminder_key, 1)
+        getIntegerFromString(R.string.p_default_location_reminder_key, 0)
 
     override suspend fun locationUpdateIntervalMinutes(): Int =
         getIntegerFromString(R.string.p_location_update_interval, 15)

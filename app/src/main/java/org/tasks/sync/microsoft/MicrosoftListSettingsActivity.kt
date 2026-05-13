@@ -35,6 +35,7 @@ class MicrosoftListSettingsActivity : BaseCaldavCalendarSettingsActivity() {
                         finish()
                     }
                     state.result?.let {
+                        saveTaskListDefaults()
                         setResult(
                             Activity.RESULT_OK,
                             Intent(TaskListFragment.ACTION_RELOAD).putExtra(
