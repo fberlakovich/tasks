@@ -1,7 +1,6 @@
 package org.tasks.ui.editviewmodel
 
 import com.natpryce.makeiteasy.MakeItEasy.with
-import com.todoroo.astrid.service.TaskCreator
 import org.tasks.data.setDefaultReminders
 import dagger.hilt.android.testing.HiltAndroidTest
 import kotlinx.collections.immutable.persistentSetOf
@@ -13,7 +12,6 @@ import org.junit.Test
 import org.tasks.R
 import org.tasks.SuspendFreeze.Companion.freezeAt
 import org.tasks.data.createDueDate
-import org.tasks.data.dao.TaskListMetadataDao
 import org.tasks.data.entity.Alarm
 import org.tasks.data.entity.Alarm.Companion.whenDue
 import org.tasks.data.entity.Alarm.Companion.whenOverdue
@@ -35,13 +33,8 @@ import org.tasks.makers.TaskMaker.START_DATE
 import org.tasks.makers.TaskMaker.newTask
 import org.tasks.time.DateTime
 import org.tasks.time.DateTimeUtils2.currentTimeMillis
-import javax.inject.Inject
-
 @HiltAndroidTest
 class ReminderTests : BaseTaskEditViewModelTest() {
-    @Inject lateinit var taskListMetadataDao: TaskListMetadataDao
-    @Inject lateinit var taskCreator: TaskCreator
-
     @Test
     fun whenStartReminder() = runBlocking {
         preferences.setDefaultAlarms(listOf(whenStarted(0)))

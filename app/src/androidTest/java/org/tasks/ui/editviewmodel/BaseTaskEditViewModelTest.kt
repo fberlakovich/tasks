@@ -5,9 +5,11 @@ import com.todoroo.astrid.activity.TaskEditFragment
 import com.todoroo.astrid.alarms.AlarmService
 import org.tasks.data.dao.TaskDao
 import org.tasks.data.TaskSaver
+import org.tasks.data.dao.TaskListMetadataDao
 import com.todoroo.astrid.gcal.GCalHelper
 import org.tasks.service.TaskCompleter
 import org.tasks.service.TaskDeleter
+import com.todoroo.astrid.service.TaskCreator
 import com.todoroo.astrid.service.TaskMover
 import com.todoroo.astrid.timers.TimerPlugin
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,7 @@ open class BaseTaskEditViewModelTest : InjectingTestCase() {
     @Inject lateinit var calendarEventProvider: CalendarEventProvider
     @Inject lateinit var gCalHelper: GCalHelper
     @Inject lateinit var taskMover: TaskMover
+    @Inject lateinit var taskCreator: TaskCreator
     @Inject lateinit var locationService: LocationService
     @Inject lateinit var preferences: Preferences
     @Inject lateinit var taskCompleter: TaskCompleter
@@ -53,6 +56,7 @@ open class BaseTaskEditViewModelTest : InjectingTestCase() {
     @Inject lateinit var userActivityDao: UserActivityDao
     @Inject lateinit var caldavDao: CaldavDao
     @Inject lateinit var taskDefaultsProvider: TaskDefaultsProvider
+    @Inject lateinit var taskListMetadataDao: TaskListMetadataDao
 
     protected lateinit var viewModel: TaskEditViewModel
 
@@ -79,6 +83,7 @@ open class BaseTaskEditViewModelTest : InjectingTestCase() {
             calendarEventProvider,
             gCalHelper,
             taskMover,
+            taskCreator,
             db.locationDao(),
             locationService,
             db.tagDao(),

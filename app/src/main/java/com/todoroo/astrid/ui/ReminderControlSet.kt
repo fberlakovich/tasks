@@ -22,6 +22,8 @@ import org.tasks.compose.edit.AlarmRow
 import org.tasks.compose.rememberReminderPermissionState
 import org.tasks.data.entity.Alarm
 import org.tasks.data.entity.Alarm.Companion.TYPE_DATE_TIME
+import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_FIVE
+import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_NONSTOP
 import org.tasks.date.DateTimeUtils
 import org.tasks.dialogs.DialogBuilder
 import org.tasks.extensions.Context.openReminderSettings
@@ -42,7 +44,11 @@ class ReminderControlSet : TaskEditControlFragment() {
     @OptIn(ExperimentalPermissionsApi::class)
     @Composable
     override fun Content() {
-        val ringMode = viewModel.ringMode.collectAsStateWithLifecycle().value
+        val ringMode = when (viewModel.ringMode.collectAsStateWithLifecycle().value) {
+            NOTIFY_MODE_NONSTOP -> 2
+            NOTIFY_MODE_FIVE -> 1
+            else -> 0
+        }
         val hasReminderPermissions by rememberReminderPermissionState()
         val notificationPermissions = if (AndroidUtilities.atLeastTiramisu()) {
             rememberPermissionState(

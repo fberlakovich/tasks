@@ -5,7 +5,6 @@ import org.tasks.data.dao.TaskDao
 import org.tasks.data.TaskSaver
 import com.todoroo.astrid.gcal.GCalHelper
 import com.todoroo.astrid.utility.TitleParser.parse
-import org.tasks.R
 import org.tasks.Strings.isNullOrEmpty
 import org.tasks.data.GoogleTask
 import org.tasks.data.UUIDHelper
@@ -66,15 +65,7 @@ class TaskCreator @Inject constructor(
             defaults,
         )
         taskDao.createNew(task)
-        val calendarId = defaults.calendarId
-        val gcalCreateEventEnabled = calendarId != null && task.hasDueDate() // $NON-NLS-1$
-        if (!isNullOrEmpty(task.title)
-                && gcalCreateEventEnabled
-                && isNullOrEmpty(task.calendarURI)) {
-            val calendarUri = gcalHelper.createTaskEvent(task, calendarId)
-            task.calendarURI = calendarUri.toString()
-        }
-        createTags(task)
+        applyPostCreateDefaults(task, defaults)
         val addToTop = preferences.addTasksToTop()
         if (task.hasTransitory(GoogleTask.KEY)) {
             googleTaskDao.insertAndShift(
@@ -118,13 +109,6 @@ class TaskCreator @Inject constructor(
                 )
             }
         }
-        if (task.hasTransitory(Place.KEY)) {
-            val place = locationDao.getPlace(task.getTransitory<String>(Place.KEY)!!)
-            if (place != null) {
-                locationDao.insert(createGeofence(place.uid, defaults.locationReminder).copy(task = task.id))
-                locationService.updateGeofences(place)
-            }
-        }
         taskSaver.save(task, null)
         alarmDao.insert(task.getDefaultAlarms(preferences.isDefaultDueTimeEnabled()))
         return task
@@ -143,8 +127,7 @@ class TaskCreator @Inject constructor(
     }
 
     /**
-     * Create task from the given content values, saving it. This version doesn't need to start with a
-     * base task model.
+     * Create a task from the given content values. This version doesn't need to start with a base task model.
      */
     internal suspend fun create(values: Map<String, Any>?, title: String?): Task = create(values, title, null)
 
@@ -238,6 +221,34 @@ class TaskCreator @Inject constructor(
                     ?.let { caldavDao.getAccountByUuid(it) }
                     ?.let { account -> CaldavFilter(calendar = calendar, account = account) }
             }
+
+    internal suspend fun applyPostCreateDefaults(task: Task, defaults: ResolvedTaskDefaults) {
+        createCalendarEvent(task, defaults.calendarId)
+        createTags(task)
+        createLocationReminder(task, defaults.locationReminder)
+    }
+
+    private suspend fun createCalendarEvent(task: Task, calendarId: String?) {
+        if (!isNullOrEmpty(task.title)
+            && calendarId != null
+            && task.hasDueDate()
+            && isNullOrEmpty(task.calendarURI)
+        ) {
+            gcalHelper.createTaskEvent(task, calendarId)?.let {
+                task.calendarURI = it.toString()
+            }
+        }
+    }
+
+    private suspend fun createLocationReminder(task: Task, locationReminder: Int) {
+        if (task.hasTransitory(Place.KEY)) {
+            val place = locationDao.getPlace(task.getTransitory<String>(Place.KEY)!!)
+            if (place != null) {
+                locationDao.insert(createGeofence(place.uid, locationReminder).copy(task = task.id))
+                locationService.updateGeofences(place)
+            }
+        }
+    }
 
     suspend fun createTags(task: Task) {
         for (tag in task.tags) {

@@ -18,6 +18,7 @@ import com.todoroo.astrid.repeats.RepeatControlSet
 import org.tasks.service.TaskCompleter
 import org.tasks.data.getDefaultAlarms
 import org.tasks.service.TaskDeleter
+import com.todoroo.astrid.service.TaskCreator
 import com.todoroo.astrid.service.TaskMover
 import com.todoroo.astrid.tags.TagsControlSet
 import com.todoroo.astrid.timers.TimerControlSet
@@ -110,6 +111,7 @@ class TaskEditViewModel @Inject constructor(
     private val calendarEventProvider: CalendarEventProvider,
     private val gCalHelper: GCalHelper,
     private val taskMover: TaskMover,
+    private val taskCreator: TaskCreator,
     private val locationDao: LocationDao,
     private val locationService: LocationService,
     private val tagDao: TagDao,
@@ -429,6 +431,11 @@ class TaskEditViewModel @Inject constructor(
             taskMover.move(listOf(task.id), selectedList)
         }
 
+        val subtaskDefaults = if (viewState.newSubtasks.any { !Strings.isNullOrEmpty(it.title) }) {
+            taskDefaultsProvider.get(selectedList)
+        } else {
+            null
+        }
         for (subtask in viewState.newSubtasks) {
             if (Strings.isNullOrEmpty(subtask.title)) {
                 continue
@@ -437,6 +444,7 @@ class TaskEditViewModel @Inject constructor(
                 subtask.completionDate = task.completionDate
             }
             taskDao.createNew(subtask)
+            subtaskDefaults?.let { taskCreator.applyPostCreateDefaults(subtask, it) }
             alarmDao.insert(subtask.getDefaultAlarms(preferences.isDefaultDueTimeEnabled()))
             firebase?.addTask("subtasks")
             when {

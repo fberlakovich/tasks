@@ -64,23 +64,59 @@ data class ResolvedTaskDefaults(
     val locationReminder: Int,
 ) {
     fun withOverrides(overrides: TaskListDefaults): ResolvedTaskDefaults = copy(
-        priority = overrides.priority ?: priority,
-        dueDate = overrides.dueDate ?: dueDate,
-        hideUntil = overrides.hideUntil ?: hideUntil,
+        priority = overrides.priority.validOrNull(VALID_PRIORITIES) ?: priority,
+        dueDate = overrides.dueDate.validOrNull(VALID_DUE_DATES) ?: dueDate,
+        hideUntil = overrides.hideUntil.validOrNull(VALID_START_DATES) ?: hideUntil,
         tagUids = overrides.tagUids ?: tagUids,
         calendarId = overrides.calendarId.overrideString(TaskListDefaults.NO_CALENDAR, calendarId),
         recurrence = overrides.recurrence.overrideString(TaskListDefaults.NO_RECURRENCE, recurrence),
-        repeatFrom = overrides.repeatFrom ?: repeatFrom,
+        repeatFrom = overrides.repeatFrom.validOrNull(VALID_REPEAT_FROM) ?: repeatFrom,
         alarms = overrides.alarms ?: alarms,
-        randomReminderHours = overrides.randomReminderHours ?: randomReminderHours,
-        ringMode = overrides.ringMode ?: ringMode,
+        randomReminderHours = overrides.randomReminderHours?.takeIf { it >= 0 } ?: randomReminderHours,
+        ringMode = overrides.ringMode.validOrNull(VALID_RING_MODES) ?: ringMode,
         locationUid = overrides.locationUid.overrideString(TaskListDefaults.NO_LOCATION, locationUid),
-        locationReminder = overrides.locationReminder ?: locationReminder,
+        locationReminder = overrides.locationReminder.validOrNull(VALID_LOCATION_REMINDERS) ?: locationReminder,
     )
+
+    private fun Int?.validOrNull(validValues: Set<Int>): Int? = this?.takeIf { it in validValues }
 
     private fun String?.overrideString(noneValue: String, inherited: String?): String? = when (this) {
         null -> inherited
         noneValue -> null
         else -> this
+    }
+
+    companion object {
+        private val VALID_PRIORITIES = setOf(
+            Task.Priority.HIGH,
+            Task.Priority.MEDIUM,
+            Task.Priority.LOW,
+            Task.Priority.NONE,
+        )
+        private val VALID_DUE_DATES = setOf(
+            Task.URGENCY_NONE,
+            Task.URGENCY_TODAY,
+            Task.URGENCY_TOMORROW,
+            Task.URGENCY_DAY_AFTER,
+            Task.URGENCY_NEXT_WEEK,
+            Task.URGENCY_IN_TWO_WEEKS,
+        )
+        private val VALID_START_DATES = setOf(
+            Task.HIDE_UNTIL_NONE,
+            Task.HIDE_UNTIL_DUE,
+            Task.HIDE_UNTIL_DUE_TIME,
+            Task.HIDE_UNTIL_DAY_BEFORE,
+            Task.HIDE_UNTIL_WEEK_BEFORE,
+        )
+        private val VALID_REPEAT_FROM = setOf(
+            Task.RepeatFrom.DUE_DATE,
+            Task.RepeatFrom.COMPLETION_DATE,
+        )
+        private val VALID_RING_MODES = setOf(
+            0,
+            Task.NOTIFY_MODE_FIVE,
+            Task.NOTIFY_MODE_NONSTOP,
+        )
+        private val VALID_LOCATION_REMINDERS = setOf(0, 1, 2, 3)
     }
 }

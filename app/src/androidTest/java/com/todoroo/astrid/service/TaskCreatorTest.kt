@@ -311,6 +311,30 @@ class TaskCreatorTest : InjectingTestCase() {
     }
 
     @Test
+    fun invalidListDefaultDateValuesFallBackToGlobalDefaults() = runBlocking {
+        preferences.setString(R.string.p_default_urgency_key, Task.URGENCY_TODAY.toString())
+        preferences.setString(R.string.p_default_hideUntil_key, Task.HIDE_UNTIL_NONE.toString())
+        val filter = listFilter("broken")
+        setListDefaults(
+            filter,
+            TaskListDefaults(
+                dueDate = 999,
+                hideUntil = 999,
+            )
+        )
+
+        val task = freezeAt(DateTime(2021, 2, 4, 14, 56, 34, 126)) {
+            taskCreator.createWithValues(filter, "test")
+        }
+
+        assertEquals(
+            createDueDate(URGENCY_SPECIFIC_DAY, DateTime(2021, 2, 4).millis),
+            task.dueDate,
+        )
+        assertEquals(0L, task.hideUntil)
+    }
+
+    @Test
     fun quickAddWithoutFilterUsesDefaultListDefaults() = runBlocking {
         preferences.setString(R.string.p_default_urgency_key, Task.URGENCY_TODAY.toString())
         val defaultList = defaultFilterProvider.getDefaultList()
