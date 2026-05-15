@@ -10,6 +10,7 @@ import com.mdimension.jchronic.Chronic
 import net.fortuna.ical4j.model.Recur.Frequency
 import org.tasks.Strings.isNullOrEmpty
 import org.tasks.data.dao.TagDataDao
+import org.tasks.data.entity.Tag
 import org.tasks.data.entity.Task
 import org.tasks.data.createDueDate
 import org.tasks.repeats.RecurrenceUtils.newRecur
@@ -20,14 +21,19 @@ import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 object TitleParser {
-    suspend fun parse(tagDataDao: TagDataDao, task: Task, tags: ArrayList<String>) {
-        repeatHelper(task)
-        listHelper(
-                tagDataDao,
-                task,
-                tags) // Don't need to know if tags affected things since we don't show alerts for them
-        dayHelper(task)
-        priorityHelper(task)
+    suspend fun parse(tagDataDao: TagDataDao, task: Task, tags: ArrayList<String>): Set<String> = buildSet {
+        if (repeatHelper(task)) {
+            add(Task.RECURRENCE.name)
+        }
+        if (listHelper(tagDataDao, task, tags)) {
+            add(Tag.KEY)
+        }
+        if (dayHelper(task)) {
+            add(Task.DUE_DATE.name)
+        }
+        if (priorityHelper(task)) {
+            add(Task.IMPORTANCE.name)
+        }
     }
 
     fun trimParenthesis(pattern: String): String {
@@ -40,7 +46,8 @@ object TitleParser {
         } else pattern
     }
 
-    suspend fun listHelper(tagDataDao: TagDataDao, task: Task, tags: ArrayList<String>) {
+    suspend fun listHelper(tagDataDao: TagDataDao, task: Task, tags: ArrayList<String>): Boolean {
+        val originalTags = tags.toList()
         var inputText = task.title
         val tagPattern = Pattern.compile("(\\s|^)#(\\(.*\\)|[^\\s]+)")
         val contextPattern = Pattern.compile("(\\s|^)@(\\(.*\\)|[^\\s]+)")
@@ -76,6 +83,7 @@ object TitleParser {
             inputText = inputText!!.substring(0, m.start()) + inputText.substring(m.end())
         }
         task.title = inputText!!.trim { it <= ' ' }
+        return tags != originalTags
     }
 
     private fun strToPriority(priorityStr: String?): Int {
@@ -94,8 +102,9 @@ object TitleParser {
     }
 
     // priorityHelper parses the string and sets the Task's importance
-    private fun priorityHelper(task: Task) {
+    private fun priorityHelper(task: Task): Boolean {
         var inputText = task.title
+        var matched = false
         val importanceStrings = arrayOf(
                 """()((^|[^\w!])!+|(^|[^\w!])!\d)($|[^\w!])""",
                 """()(?i)((\s?bang){1,})$""",
@@ -108,6 +117,7 @@ object TitleParser {
             while (true) {
                 val m = importancePattern.matcher(inputText)
                 if (m.find()) {
+                    matched = true
                     task.priority = strToPriority(m.group(2).trim { it <= ' ' })
                     val start = if (m.start() == 0) 0 else m.start() + 1
                     inputText = inputText!!.substring(0, start) + inputText.substring(m.end())
@@ -117,6 +127,7 @@ object TitleParser {
             }
         }
         task.title = inputText!!.trim { it <= ' ' }
+        return matched
     }
 
     // helper for dayHelper. Converts am/pm to an int 0/1.
@@ -157,7 +168,7 @@ object TitleParser {
     // Handles setting the task's date.
     // Day of week (e.g. Monday, Tuesday,..) is overridden by a set date (e.g. October 23 2013).
     // Vague times (e.g. breakfast, night) are overridden by a set time (9 am, at 10, 17:00)
-    private fun dayHelper(task: Task) {
+    private fun dayHelper(task: Task): Boolean {
         var inputText = task.title
         var cal: Calendar? = null
         var containsSpecificTime = false
@@ -344,12 +355,14 @@ object TitleParser {
             } else {
                 task.dueDate = createDueDate(Task.URGENCY_SPECIFIC_DAY, cal.time.time)
             }
+            return true
         }
+        return false
     }
 
     // ---------------------DATE--------------------------
     // Parses through the text and sets the frequency of the task.
-    private fun repeatHelper(task: Task) {
+    private fun repeatHelper(task: Task): Boolean {
         val inputText = task.title
         val repeatTimes = HashMap<String, Frequency>()
         repeatTimes["(?i)\\bevery ?\\w{0,6} days?\\b"] = Frequency.DAILY
@@ -378,7 +391,7 @@ object TitleParser {
                 recur.setFrequency(rtime!!.name)
                 recur.interval = findInterval(inputText)
                 task.recurrence = recur.toString()
-                return
+                return true
             }
         }
         for (repeatTimeIntervalOne in repeatTimesIntervalOne.keys) {
@@ -390,9 +403,10 @@ object TitleParser {
                 recur.setFrequency(rtime!!.name)
                 recur.interval = 1
                 task.recurrence = recur.toString()
-                return
+                return true
             }
         }
+        return false
     }
 
     // helper method for repeatHelper.

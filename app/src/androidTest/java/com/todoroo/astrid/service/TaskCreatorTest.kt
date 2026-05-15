@@ -157,7 +157,7 @@ class TaskCreatorTest : InjectingTestCase() {
             TaskListDefaults(
                 dueDate = Task.URGENCY_TODAY,
                 hideUntil = Task.HIDE_UNTIL_DUE,
-                randomReminderHours = 3,
+                randomReminderHours = 24,
                 ringMode = Task.NOTIFY_MODE_FIVE,
             )
         )
@@ -171,7 +171,7 @@ class TaskCreatorTest : InjectingTestCase() {
             task.dueDate,
         )
         assertEquals(DateTime(2021, 2, 4).millis, task.hideUntil)
-        assertEquals(3 * ONE_HOUR, task.randomReminder)
+        assertEquals(24 * ONE_HOUR, task.randomReminder)
         assertEquals(Task.NOTIFY_MODE_FIVE, task.ringFlags)
     }
 

@@ -184,9 +184,6 @@ class TaskCreator @Inject constructor(
                 }
             }
         }
-        if (initialValues.isNotEmpty()) {
-            task.putTransitory(Task.TRANS_INITIAL_VALUES, initialValues)
-        }
         if (values?.containsKey(DUE_DATE.name) != true) {
             task.dueDate = createDueDate(defaults.dueDate, 0)
         }
@@ -200,9 +197,12 @@ class TaskCreator @Inject constructor(
                 .let { tags.addAll(it) }
         }
         try {
-            parse(tagDataDao, task, tags)
+            initialValues.addAll(parse(tagDataDao, task, tags))
         } catch (e: Throwable) {
             Timber.e(e)
+        }
+        if (initialValues.isNotEmpty()) {
+            task.putTransitory(Task.TRANS_INITIAL_VALUES, initialValues)
         }
         task.putTransitory(Tag.KEY, tags)
         return task

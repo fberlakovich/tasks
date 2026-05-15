@@ -1,6 +1,5 @@
 package org.tasks.data.entity
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -40,8 +39,6 @@ fun TaskListMetadata.getDefaults(): TaskListDefaults = defaults
         try {
             TASK_LIST_DEFAULTS_JSON.decodeFromString<TaskListDefaults>(it)
         } catch (_: IllegalArgumentException) {
-            TaskListDefaults.EMPTY
-        } catch (_: SerializationException) {
             TaskListDefaults.EMPTY
         }
     }

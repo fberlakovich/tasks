@@ -72,7 +72,8 @@ data class ResolvedTaskDefaults(
         recurrence = overrides.recurrence.overrideString(TaskListDefaults.NO_RECURRENCE, recurrence),
         repeatFrom = overrides.repeatFrom.validOrNull(VALID_REPEAT_FROM) ?: repeatFrom,
         alarms = overrides.alarms ?: alarms,
-        randomReminderHours = overrides.randomReminderHours?.takeIf { it >= 0 } ?: randomReminderHours,
+        randomReminderHours = overrides.randomReminderHours.validOrNull(VALID_RANDOM_REMINDER_HOURS)
+            ?: randomReminderHours,
         ringMode = overrides.ringMode.validOrNull(VALID_RING_MODES) ?: ringMode,
         locationUid = overrides.locationUid.overrideString(TaskListDefaults.NO_LOCATION, locationUid),
         locationReminder = overrides.locationReminder.validOrNull(VALID_LOCATION_REMINDERS) ?: locationReminder,
@@ -112,6 +113,7 @@ data class ResolvedTaskDefaults(
             Task.RepeatFrom.DUE_DATE,
             Task.RepeatFrom.COMPLETION_DATE,
         )
+        private val VALID_RANDOM_REMINDER_HOURS = setOf(0, 1, 24, 168, 336)
         private val VALID_RING_MODES = setOf(
             0,
             Task.NOTIFY_MODE_FIVE,

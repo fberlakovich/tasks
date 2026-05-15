@@ -405,6 +405,19 @@ class ReminderTests : BaseTaskEditViewModelTest() {
     }
 
     @Test
+    fun changingListKeepsTitleParserPriorityThatMatchesOriginalDefaults() = runBlocking {
+        preferences.setString(R.string.p_default_importance_key, Task.Priority.MEDIUM.toString())
+        val list = listFilter("work")
+        setListDefaults(list, TaskListDefaults(priority = Task.Priority.NONE))
+        val task = taskCreator.createWithValues("Call Bob !!")
+
+        setup(task)
+        viewModel.setList(list)
+
+        assertEquals(Task.Priority.MEDIUM, viewModel.viewState.value.task.priority)
+    }
+
+    @Test
     fun newLocationUsesListDefaultLocationReminder() = runBlocking {
         val list = listFilter("work")
         setListDefaults(

@@ -74,6 +74,7 @@ import org.tasks.data.entity.Task.Companion.HIDE_UNTIL
 import org.tasks.data.entity.Task.Companion.IMPORTANCE
 import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_FIVE
 import org.tasks.data.entity.Task.Companion.NOTIFY_MODE_NONSTOP
+import org.tasks.data.entity.Task.Companion.RECURRENCE
 import org.tasks.data.entity.Task.Companion.hasDueTime
 import org.tasks.data.entity.TaskAttachment
 import org.tasks.data.entity.UserActivity
@@ -797,7 +798,9 @@ class TaskEditViewModel @Inject constructor(
         startDateEdited = HIDE_UNTIL.name in initialValues || task.hideUntil != task.copy()
             .apply { dueDate = task.dueDate }
             .createHideUntil(defaults.hideUntil, 0)
-        recurrenceEdited = task.recurrence != defaults.recurrence || task.repeatFrom != defaults.repeatFrom
+        recurrenceEdited = RECURRENCE.name in initialValues ||
+                task.recurrence != defaults.recurrence ||
+                task.repeatFrom != defaults.repeatFrom
         tagsEdited = Tag.KEY in initialValues || tags != defaultTags(defaults.tagUids).toPersistentSet()
         locationEdited = Place.KEY in initialValues || !location.sameLocationDefault(defaultLocation(defaults))
     }
